@@ -100,16 +100,23 @@ if uploaded_file is not None:
         ax.set_ylabel(selected_features[0])
         ax.legend()
         st.pyplot(fig)
-
-        # Interpretability using SHAP
+        
+        # Interpretability using SHAP (KernelExplainer)
         st.subheader("Model Interpretability with SHAP")
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(scaled_data)
+        compute_shap = st.checkbox("Compute SHAP values (may take time for large datasets)", value=False)
+
+        if compute_shap:
+            # Using KernelExplainer as IsolationForest is not natively supported
+            background_sample = scaled_data[np.random.choice(scaled_data.shape[0], size=min(100, len(scaled_data)), replace=False)]
+            explainer = shap.KernelExplainer(model.predict, background_sample)
+            shap_values = explainer.shap_values(scaled_data, nsamples=100)
 
         st.write("SHAP Summary Plot:")
         shap.summary_plot(shap_values, pd.DataFrame(scaled_data, columns=selected_features))
         st.pyplot()
-
+        else:
+            st.write("Enable SHAP computation to interpret feature contributions.")
+        
         # Feature importance explanation (approximation)
         st.subheader("Feature Importance")
         if hasattr(model, 'feature_importances_'):
