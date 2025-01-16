@@ -111,9 +111,9 @@ if uploaded_file is not None:
             explainer = shap.KernelExplainer(model.predict, background_sample)
             shap_values = explainer.shap_values(scaled_data, nsamples=100)
 
-        st.write("SHAP Summary Plot:")
-        shap.summary_plot(shap_values, pd.DataFrame(scaled_data, columns=selected_features))
-        st.pyplot()
+            st.write("SHAP Summary Plot:")
+            shap.summary_plot(shap_values, pd.DataFrame(scaled_data, columns=selected_features))
+            st.pyplot()
         else:
             st.write("Enable SHAP computation to interpret feature contributions.")
         
