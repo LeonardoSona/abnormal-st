@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
+import shap
 
 # Streamlit app title
 st.title("Abnormal Usage Detection Tool")
@@ -22,6 +23,10 @@ st.markdown(
         - `Clicks`: Number of clicks performed in a session.
         - `Transactions`: Number of transactions completed.
         - `SessionTime`: Time spent in the system.
+    - **Contamination:** Proportion of data expected to be anomalies (default is 10%). Adjust based on your use case.
+    - **Random State:** Ensures reproducibility by fixing the random seed for the algorithm.
+    - You can concatenate columns (e.g., UserID and AppID) to create unique identifiers for anomaly detection.
+    - **Interpretability:** Anomaly detection focuses on identifying outliers, but explanations can be provided using SHAP for feature contributions.
     """
 )
 
@@ -31,8 +36,8 @@ uploaded_file = st.sidebar.file_uploader("Upload your CSV file", type="csv")
 
 # Parameters for Isolation Forest
 st.sidebar.title("Model Parameters")
-contamination = st.sidebar.slider("Contamination (Anomaly Proportion)", min_value=0.01, max_value=0.5, value=0.1, step=0.01)
-random_state = st.sidebar.number_input("Random State", value=42, step=1)
+contamination = st.sidebar.slider("Contamination (Anomaly Proportion)", min_value=0.01, max_value=0.5, value=0.1, step=0.01, help="Proportion of the dataset expected to be anomalies.")
+random_state = st.sidebar.number_input("Random State", value=42, step=1, help="Fixes the random seed for reproducibility.")
 
 # Placeholder for results
 st.subheader("Detection Results")
@@ -46,10 +51,30 @@ if uploaded_file is not None:
     # Feature selection
     st.sidebar.title("Feature Selection")
     numeric_columns = data.select_dtypes(include=[np.number]).columns.tolist()
-    selected_features = st.sidebar.multiselect("Select features for anomaly detection", options=numeric_columns, default=numeric_columns)
+    non_numeric_columns = data.select_dtypes(exclude=[np.number]).columns.tolist()
+    selected_features = st.sidebar.multiselect(
+        "Select features for anomaly detection", 
+        options=numeric_columns + non_numeric_columns, 
+        default=numeric_columns
+    )
+
+    # Option to concatenate columns for unique identifiers
+    st.sidebar.title("Advanced Options")
+    concat_columns = st.sidebar.multiselect(
+        "Select columns to concatenate for unique identifiers", 
+        options=non_numeric_columns
+    )
+
+    if len(concat_columns) > 0:
+        data["Concatenated"] = data[concat_columns].astype(str).agg("_".join, axis=1)
+        selected_features.append("Concatenated")
 
     if len(selected_features) > 0:
         # Preprocessing
+        for col in non_numeric_columns:
+            if col in selected_features and col != "Concatenated":
+                data[col] = data[col].astype("category").cat.codes
+
         scaler = StandardScaler()
         scaled_data = scaler.fit_transform(data[selected_features])
 
@@ -62,6 +87,11 @@ if uploaded_file is not None:
         # Display results
         st.write(f"Detected {data['Anomaly'].sum()} anomalies out of {len(data)} records.")
 
+        # List of anomalies for verification
+        st.subheader("List of Anomalous Records")
+        anomalies = data[data["Anomaly"] == 1]
+        st.dataframe(anomalies)
+
         # Visualize anomalies
         st.subheader("Anomaly Visualization")
         fig, ax = plt.subplots()
@@ -70,6 +100,15 @@ if uploaded_file is not None:
         ax.set_ylabel(selected_features[0])
         ax.legend()
         st.pyplot(fig)
+
+        # Interpretability using SHAP
+        st.subheader("Model Interpretability with SHAP")
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(scaled_data)
+
+        st.write("SHAP Summary Plot:")
+        shap.summary_plot(shap_values, pd.DataFrame(scaled_data, columns=selected_features))
+        st.pyplot()
 
         # Feature importance explanation (approximation)
         st.subheader("Feature Importance")
